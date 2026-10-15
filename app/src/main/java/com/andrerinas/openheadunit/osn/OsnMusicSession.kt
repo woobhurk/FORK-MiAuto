@@ -87,6 +87,7 @@ internal object OsnMusicSession {
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, info.artistName.orEmpty())
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, info.albumName.orEmpty())
             .putString(MediaMetadataCompat.METADATA_KEY_AUTHOR, info.authorName.orEmpty())
+            .putString(MediaMetadataCompat.METADATA_KEY_WRITER, info.writerName.orEmpty())
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
         coverBitmap(info.cover)?.let { metadata.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it) }
         val state = if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED

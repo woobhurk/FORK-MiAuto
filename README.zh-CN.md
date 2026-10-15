@@ -122,8 +122,9 @@ ICCOA CarLink（CarWith / Car+ 车联 / Jovi InCar 走的手机侧协议）以�
 **该 SDK 不入 git**（见 [app/libs/README.md](app/libs/README.md)）。它在编译期的一半是一份纯签名存根
 `app/stubs/icar-sdk-stubs.jar`，这份**是入库的** —— 只用于类型检查，绝不会进 APK。
 
-缺少 SDK dex 时构建仍会成功，但产出的 APK 不具备 CarWith 能力。当 SDK dex 存在时，
-`injectIccoaDex` 会把它作为下一个空闲的 `classesN.dex` 追加进成品 APK，再 zipalign 并重签 ——
+缺少 SDK dex 时构建仍会成功，并且会先从 `apks/ICCOA Carlink_*.apk` 抽出 SDK 再注入。
+`scripts/extract_icar_sdk.py` 生成 gitignore 的 `app/libs/icar-sdk.dex` 与 `icar-sdk-deps.dex`，
+`injectIccoaDex` 把它们作为后续的 `classesN.dex` 追加进成品 APK，再 zipalign 并重签 ——
 因为改动 zip 会作废 AGP 的签名。该任务是 finalizer，因此做了幂等处理：追加前先剔除任何与
 SDK dex **逐字节相同**的历史注入副本，避免反复构建把 APK 撑大。
 

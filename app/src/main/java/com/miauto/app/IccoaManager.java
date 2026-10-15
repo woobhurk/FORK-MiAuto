@@ -367,16 +367,13 @@ public class IccoaManager {
 
         @Override
         public UCarCommon.WorkMode onSelectWorkMode(String deviceID, UCarCommon.WorkMode supported) {
+            // The OSN CarLink build that actually connects picks the whole-screen mirror.
+            // Windowed / fullscreen-app modes are a different phone UI and are not what that
+            // build asks for.
             UCarCommon.WorkMode chosen;
-            if (supported == null) {
-                chosen = UCarCommon.WorkMode.NONE;
-            } else if (supported.isSupportAppWindowCast()) {
-                chosen = UCarCommon.WorkMode.APP_WINDOW_CAST;
-            } else if (supported.isSupportAppFullScreenCast()) {
-                chosen = UCarCommon.WorkMode.APP_FULLSCREEN_CAST;
-            } else if (supported.isSupportNormalCast()) {
+            if (supported != null && supported.isSupportNormalCast()) {
                 chosen = UCarCommon.WorkMode.NORMAL_CAST;
-            } else if (supported.isSupportDataTransfer()) {
+            } else if (supported != null && supported.isSupportDataTransfer()) {
                 chosen = UCarCommon.WorkMode.DATA_TRANSFER;
             } else {
                 chosen = UCarCommon.WorkMode.NONE;

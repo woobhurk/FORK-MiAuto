@@ -24,9 +24,12 @@ SDK classes simply exist at runtime.
 
 ### Providing it
 
-Put a file named `icar-sdk.dex` in this directory and build normally. The expected content is
-the CarLink SDK dex (currently ~7.1 MB) that implements the `com.share.connect.*` service
-surface declared in `app/src/main/AndroidManifest.xml`.
+`./gradlew :app:assembleGithubDebug` builds `app/libs/icar-sdk.dex` and `icar-sdk-deps.dex` when they are missing.
+`scripts/extract_icar_sdk.py` takes the SDK packages out of `apks/ICCOA Carlink_*.apk`, keeps the
+demo classes the patched SDK still names, rewrites the head-unit label to `MiAutoCar`, and
+assembles one dex. The dex stays gitignored.
+
+A hand-built pair already in this directory is left as-is. Delete both files to regenerate.
 
 **CI builds without it.** A repository secret is not an option — GitHub caps Actions secrets
 at 48 KB and this dex is ~7 MB — so `.github/workflows/android-ci.yml` is a compile / R8 /

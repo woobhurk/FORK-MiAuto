@@ -343,7 +343,14 @@ dependencies {
 //   纯 java.util.zip 实现，不依赖外部脚本。
 // =====================================================================
 val sdkDex = file("libs/icar-sdk.dex")
-val sdkDexBytes: ByteArray = if (sdkDex.exists()) sdkDex.readBytes() else ByteArray(0)
+val sdkDepsDex = file("libs/icar-sdk-deps.dex")
+val extractIcarSdk = tasks.register<Exec>("extractIcarSdk") {
+    group = "build"
+    description = "Builds app/libs/icar-sdk*.dex from the Xiaoba CarLink APK in apks/"
+    onlyIf { !sdkDex.exists() || !sdkDepsDex.exists() }
+    commandLine("python3", rootProject.file("scripts/extract_icar_sdk.py").absolutePath)
+    workingDir = rootProject.projectDir
+}
 val iccoaSdkHome = (System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT"))
     ?.let { file(it) }
     ?: file("C:/Users/Administrator/AppData/Local/Android/Sdk")
@@ -359,8 +366,10 @@ val iccoaDebugKeystore = file(System.getProperty("user.home")).resolve(".android
 val injectIccoaDex = tasks.register("injectIccoaDex") {
     group = "build"
     description = "Appends the ICCOA CarLink SDK dex into the APKs and re-signs them"
-    onlyIf { sdkDex.exists() }
+    onlyIf { sdkDex.exists() && sdkDepsDex.exists() }
+    dependsOn(extractIcarSdk)
     doLast {
+        val sdkParts = listOf(sdkDex, sdkDepsDex).map { it.readBytes() }
         val apkRoot = layout.buildDirectory.dir("outputs/apk").get().asFile
         val apks = (apkRoot.listFiles() ?: emptyArray())
             .filter { it.isDirectory }
@@ -400,17 +409,16 @@ val injectIccoaDex = tasks.register("injectIccoaDex") {
             //   APK 每 build 膨胀一次（曾出现 classes5 + classes6 两份 SDK）。
             val staleCopies = entries.filter { e ->
                 e.name.matches(Regex("classes\\d+\\.dex")) &&
-                    e.size == sdkDexBytes.size.toLong() &&
-                    zin.getInputStream(e).readBytes().contentEquals(sdkDexBytes)
+                    sdkParts.any { part ->
+                        e.size == part.size.toLong() &&
+                            zin.getInputStream(e).readBytes().contentEquals(part)
+                    }
             }.map { it.name }.toSet()
             if (staleCopies.isNotEmpty()) {
                 logger.lifecycle(">>> [${apk.name}] 移除历史注入副本: ${staleCopies.joinToString(", ")}")
             }
             val kept = entries.filter { it.name !in staleCopies }
-            val existing = kept.map { it.name }.toSet()
-            var n = 2
-            while (existing.contains("classes$n.dex")) n++
-            val newName = "classes$n.dex"
+            val existing = kept.map { it.name }.toMutableSet()
             BufferedOutputStream(FileOutputStream(tmpInjected)).use { bos ->
                 val zout = ZipOutputStream(bos)
                 for (e in kept) {
@@ -429,15 +437,23 @@ val injectIccoaDex = tasks.register("injectIccoaDex") {
                     zout.putNextEntry(ne)
                     zout.write(data)
                 }
-                val de = ZipEntry(newName)
-                de.method = ZipEntry.DEFLATED
-                zout.putNextEntry(de)
-                zout.write(sdkDexBytes)
-                zout.closeEntry()
+                val added = mutableListOf<String>()
+                for (part in sdkParts) {
+                    var n = 2
+                    while (existing.contains("classes$n.dex")) n++
+                    val newName = "classes$n.dex"
+                    existing.add(newName)
+                    val de = ZipEntry(newName)
+                    de.method = ZipEntry.DEFLATED
+                    zout.putNextEntry(de)
+                    zout.write(part)
+                    zout.closeEntry()
+                    added += "$newName (${part.size} B)"
+                }
                 zout.close()
+                logger.lifecycle(">>> [${apk.name}] 已附加 ${added.joinToString(", ")}")
             }
             zin.close()
-            logger.lifecycle(">>> [${apk.name}] 已附加 $newName (${sdkDex.length()} B)")
 
             // --- 2. zipalign ---
             exec { commandLine(iccoaZipalign.absolutePath, "-p", "-f", "4", tmpInjected.absolutePath, tmpAligned.absolutePath) }
