@@ -41,8 +41,10 @@ public class IccoaManager {
         void onConnectionState(int state);
         void onPinCode(String pinCode, String carDeviceName);
         void onCastStarted();
-        /** 手机导航信息（POC-2 / BYD 仪表与 HUD 的数据源）。 */
+        /** 手机导航信息。比亚迪走 HUD 输出，领克 OSN 走高德标准广播。 */
         void onNavigation(UCarCommon.NavigationInfo info);
+        /** 手机正在播放的歌曲。领克 OSN 用它驱动仪表、桌面和 HUD。 */
+        void onMusic(UCarCommon.MusicInfo info);
     }
 
     private final Context appCtx;
@@ -390,7 +392,10 @@ public class IccoaManager {
             listener.onNavigation(info);
         }
 
-        @Override public void onMusicInfoReceived(String phoneId, UCarCommon.MusicInfo info) { }
+        @Override
+        public void onMusicInfoReceived(String phoneId, UCarCommon.MusicInfo info) {
+            if (info != null) listener.onMusic(info);
+        }
         @Override public void onCallInfoReceived(String phoneId, UCarCommon.CallInfo info) { }
         @Override public void onPhoneStateInfoReceived(String phoneId, UCarCommon.PhoneStateInfo info) { }
         @Override public void onPOIReceived(String phoneId, UCarCommon.POIAddress poi) { }

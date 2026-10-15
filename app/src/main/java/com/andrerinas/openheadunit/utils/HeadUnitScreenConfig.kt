@@ -62,13 +62,10 @@ object HeadUnitScreenConfig {
             // On API 30+, bounds on an Activity context often return the usable area.
             // We use the displayMetrics as a fallback for the physical area.
             //
-            // DiLink 5.1 caveat: BYD's "byd-freeform" windowing mode clamps the activity's
-            // appBounds (and therefore displayMetrics) to 1920x984 while the window frame
-            // (currentWindowMetrics.bounds) really is the full 1920x1080 with both system
-            // bars hidden. Taking displayMetrics at face value makes the "real" screen
-            // 96px shorter than the view BydFullscreen actually draws into, which shows up
-            // as a vertically stretched picture plus a growing touch offset down the screen.
-            // The real area can never be smaller than the window we are given, so clamp it up.
+            // Some head-unit windowing modes report displayMetrics smaller than the
+            // actual window (for example 1920x984 inside a 1920x1080 frame). Treating
+            // that shorter value as the real screen stretches the picture and shifts
+            // touches. The real area cannot be smaller than the window, so clamp it up.
             realW = Math.max(displayMetrics.widthPixels, bounds.width())
             realH = Math.max(displayMetrics.heightPixels, bounds.height())
             usableW = bounds.width()

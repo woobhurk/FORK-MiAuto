@@ -10,13 +10,15 @@
         <intent>
             <action android:name="android.settings.WIFI_SETTINGS" />
         </intent>
-        <package android:name="com.byd.clusterdebug" />
-        <package android:name="com.byd.amapservice" />
-        <package android:name="com.ts.car.someip.service" />
         <package android:name="com.google.android.projection.gearhead" />
-        <!-- Navigation apps the ICCOA SDK probes for on the head unit. -->
         <package android:name="com.baidu.BaiduMap" />
         <package android:name="com.autonavi.minimap" />
+        <!-- Lynk / Geely OSN: media center and OneOS services the cluster and HUD belong to. -->
+        <package android:name="com.geely.mediacenterservice" />
+        <package android:name="com.geely.service.oneosapi" />
+        <package android:name="com.geely.online.service" />
+        <package android:name="com.xiaoba.launcher" />
+        <package android:name="com.xiaoba.smartcontroller" />
     </queries>
 
     <uses-feature
@@ -125,21 +127,6 @@
             android:theme="@style/AppTheme">
 
         </activity>
-
-        <!--
-            Carries the instrument-cluster mirror on the cluster display. Never started from the
-            launcher: it is launched explicitly onto the cluster display with setLaunchDisplayId,
-            and only as a fallback when a Presentation cannot be composited there (the route
-            DiPlay's working DiLink 4.0 build uses). Translucent so the stock cluster read-outs
-            underneath stay visible.
-        -->
-        <activity
-            android:name=".cluster.ClusterHostActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/AppTheme.Translucent" />
 
         <!--
             Hosts the ICCOA CarLink (Xiaomi CarWith) phone stream. Not launched from the launcher:
@@ -304,6 +291,12 @@
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
                 <action android:name="hy.intent.action.MEDIA_BUTTON" />
+                <action android:name="geely.intent.action.MEDIA_BUTTON" />
+                <action android:name="ecarx.intent.action.MEDIA_BUTTON" />
+                <action android:name="com.ecarx.intent.action.MEDIA_BUTTON" />
+                <action android:name="com.geely.intent.action.MEDIA_BUTTON" />
+                <action android:name="com.ecarx.media.action.KEY_EVENT" />
+                <action android:name="com.geely.car.media.action.KEY_EVENT" />
                 <action android:name="com.nwd.action.ACTION_KEY_VALUE" />
                 <action android:name="com.microntek.irkeyUp" />
                 <action android:name="com.microntek.irkeyDown" />

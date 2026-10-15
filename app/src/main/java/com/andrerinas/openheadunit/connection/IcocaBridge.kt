@@ -2,6 +2,7 @@ package com.andrerinas.openheadunit.connection
 
 import android.content.Context
 import android.view.Surface
+import com.andrerinas.openheadunit.osn.OsnCarLink
 import com.andrerinas.openheadunit.utils.AppLog
 import com.miauto.app.IccoaManager
 import com.ucar.vehiclesdk.UCarCommon
@@ -17,12 +18,14 @@ import kotlinx.coroutines.flow.update
  * DiAuto drives every consumer from a single `StateFlow` (see `CommManager.connectionState`);
  * the ICCOA SDK instead pushes callbacks on worker threads. This class is the adapter between
  * the two: it implements [IccoaManager.Listener], folds the raw callbacks into one observable
- * [state], and exposes the navigation stream the BYD cluster / HUD outputs consume.
+ * [state], and exposes the navigation stream the cluster / HUD outputs consume.
  *
  * MiAuto is ICCOA-only — there is no Android Auto path at runtime — so this bridge (not
  * `CommManager`) is the source of truth for both the home screen and the projection activity.
  */
 class IcocaBridge(context: Context) : IccoaManager.Listener {
+
+    private val appContext = context.applicationContext
 
     /** Coarse connection phase, mapped from the SDK's numeric state. */
     enum class Phase {
@@ -81,6 +84,7 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
         started = false
         AppLog.i("ICCOA: stop()")
         manager.stop()
+        OsnCarLink.onDisconnected(appContext)
         _state.update { it.copy(phase = Phase.Idle, pinCode = null) }
     }
 
@@ -154,6 +158,11 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
 
     override fun onNavigation(info: UCarCommon.NavigationInfo?) {
         _navigation.value = info
+        if (info != null) OsnCarLink.onNavigation(appContext, info)
+    }
+
+    override fun onMusic(info: UCarCommon.MusicInfo?) {
+        if (info != null) OsnCarLink.onMusic(appContext, info)
     }
 
     /**
@@ -166,11 +175,15 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
      * non-pairing phase is what makes the code "refresh itself" across reconnects.
      */
     private fun updatePhase(phase: Phase) {
+        val previous = _state.value.phase
         _state.update { current ->
             current.copy(
                 phase = phase,
                 pinCode = if (phase == Phase.Pairing) current.pinCode else null,
             )
+        }
+        if (previous == Phase.Connected && phase != Phase.Connected) {
+            OsnCarLink.onDisconnected(appContext)
         }
     }
 }

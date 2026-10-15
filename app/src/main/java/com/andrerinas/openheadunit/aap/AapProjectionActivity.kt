@@ -29,7 +29,6 @@ import com.andrerinas.openheadunit.R
 import com.andrerinas.openheadunit.aap.protocol.messages.TouchEvent
 import com.andrerinas.openheadunit.aap.protocol.messages.VideoFocusEvent
 import com.andrerinas.openheadunit.app.SurfaceActivity
-import com.andrerinas.openheadunit.cluster.ClusterProjectionController
 import com.andrerinas.openheadunit.connection.CommManager
 import com.andrerinas.openheadunit.contract.KeyIntent
 import kotlinx.coroutines.launch
@@ -466,8 +465,6 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
                 // discarded view would land after the replacement's onSurfaceChanged and release
                 // video focus for the new view's running stream.
                 projectionView.removeCallback(this)
-                // Its surface is about to be replaced, so stop sampling it before it goes away.
-                ClusterProjectionController.onProjectionViewLost(projectionView)
                 videoDecoder.softwareYuvFrameSink = null
                 videoDecoder.stop(DecoderStopPolicy.REASON_PROJECTION_VIEW_RECREATE)
                 container.removeView(projectionView as View)
@@ -883,9 +880,6 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
 
         container.addView(overlayView)
         overlayView.requestFocus()
-        // DiLink (byd-freeform) hides the bottom ~96px of the window from the decor;
-        // claim it back so projection is true fullscreen and bottom-bar touches land.
-        bydFullscreen.expand(this, container, overlayView)
         setFullscreen() // Call setFullscreen here as well
 
         val loadingOverlay = findViewById<View>(R.id.loading_overlay)
@@ -1775,15 +1769,7 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
     }
 
-    private val bydFullscreen = com.andrerinas.openheadunit.utils.BydFullscreen()
-
     override fun onDestroy() {
-        bydFullscreen.release()
-        if (::projectionView.isInitialized) {
-            // The mirror holds a reference to this view's surface; drop it while the surface is still
-            // alive so the controller cannot sample a destroyed surface on its next tick.
-            ClusterProjectionController.onProjectionViewLost(projectionView)
-        }
         super.onDestroy()
         if (isFinishReceiverRegistered) {
             unregisterReceiver(finishReceiver)
@@ -1902,10 +1888,6 @@ class AapProjectionActivity : SurfaceActivity(), IProjectionView.Callbacks, Vide
         }
 
         projectionView.addCallback(this)
-        // Hand the view to the cluster mirror. Android Auto only ever sends one video stream, so the
-        // mirror samples this view's output instead of a second decode; the controller ignores this
-        // until a cluster display and the feature switch are both present.
-        ClusterProjectionController.onProjectionViewAvailable(this, projectionView)
         // Baseline for the "no frame drawn while streaming" renderer check (issue #767).
         projectionStartMs = SystemClock.elapsedRealtime()
     }

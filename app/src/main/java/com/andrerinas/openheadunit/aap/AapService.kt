@@ -738,9 +738,8 @@ class AapService : Service(), UsbReceiver.Listener {
         // Initialize MediaSession early and set it active immediately.
         // This ensures media button routing works even BEFORE an AA connection,
         // which is critical for keymap configuration and early button presses.
-        // ICCOA-only: an active MediaSession with playback actions would make the car's media keys
-        // resolve to this app instead of the phone's audio. The ICCOA SDK carries media control over
-        // its own channel, so MiAuto deliberately stays out of the way.
+        // Lynk OSN cluster, HUD and steering wheel follow the active media session.
+        com.andrerinas.openheadunit.osn.OsnCarLink.start(this)
         if (!BuildConfig.ICCOA_ONLY) {
             if (mediaSession == null) {
                 setupMediaSession()
@@ -1016,10 +1015,6 @@ class AapService : Service(), UsbReceiver.Listener {
      * that [VideoDecoder.setSurface] is always called before the first video frame arrives.
      */
     private fun onConnected() {
-        com.andrerinas.openheadunit.hud.BydNavigationOutputs.start(this)
-        // The cluster mirror samples the projection view, so it can only be armed once a session
-        // exists; it stays idle by itself until that view is available.
-        com.andrerinas.openheadunit.cluster.ClusterProjectionController.onSessionStarted(this)
         isSwitchingToAccessory.set(false)
         updateNotification()
         acquireWifiLock()
@@ -1181,8 +1176,6 @@ class AapService : Service(), UsbReceiver.Listener {
      * 4. Scheduling a reconnect attempt if applicable (see [scheduleReconnectIfNeeded])
      */
     private fun onDisconnected(state: CommManager.ConnectionState.Disconnected) {
-        com.andrerinas.openheadunit.hud.BydNavigationOutputs.stop()
-        com.andrerinas.openheadunit.cluster.ClusterProjectionController.onSessionStopped()
         isSwitchingToAccessory.set(false)
         releaseWifiLock()
 
@@ -1804,8 +1797,6 @@ class AapService : Service(), UsbReceiver.Listener {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        com.andrerinas.openheadunit.hud.BydNavigationOutputs.stop()
-        com.andrerinas.openheadunit.cluster.ClusterProjectionController.onSessionStopped()
         AppLog.i("AapService: onTaskRemoved — attempting restart")
         try {
             val restartIntent = Intent(this, AapService::class.java)
@@ -1817,8 +1808,6 @@ class AapService : Service(), UsbReceiver.Listener {
     }
 
     override fun onDestroy() {
-        com.andrerinas.openheadunit.hud.BydNavigationOutputs.stop()
-        com.andrerinas.openheadunit.cluster.ClusterProjectionController.onSessionStopped()
         AppLog.i("AapService destroying... (wakeLock held=${bootWakeLock?.isHeld == true})")
         isDestroying = true
         mediaMetadataDecodeJob?.cancel()

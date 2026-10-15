@@ -199,9 +199,6 @@ class ConnectionSetupFragment : Fragment() {
     }
 
     private fun openSystem(intent: Intent) {
-        if (requireContext().packageManager.resolveActivity(intent, 0)?.activityInfo?.packageName == "com.byd.carsettings") {
-            runCatching { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)) }
-        }
         runCatching { startActivity(intent) }.onFailure {
             runCatching { startActivity(Intent(SystemSettings.ACTION_SETTINGS)) }.onFailure {
                 Toast.makeText(requireContext(), getString(R.string.setup_open_settings_manually), Toast.LENGTH_LONG).show()
