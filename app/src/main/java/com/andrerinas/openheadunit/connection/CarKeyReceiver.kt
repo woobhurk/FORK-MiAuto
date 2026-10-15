@@ -128,7 +128,11 @@ class CarKeyReceiver : BroadcastReceiver() {
 
     /** Single key press or release — broadcasts for learning and projection handling. */
     private fun handleKey(context: Context, commManager: CommManager, keyCode: Int, isDown: Boolean) {
-        com.andrerinas.openheadunit.osn.OsnCarLink.onHardwareKey(keyCode, isDown)
+        try {
+            com.andrerinas.openheadunit.osn.OsnCarLink.onHardwareKey(keyCode, isDown)
+        } catch (error: Throwable) {
+            AppLog.w("OSN steering key was not forwarded: ${error.javaClass.simpleName}: ${error.message}")
+        }
         AppLog.d("CarKeyReceiver: Broadcasting key event: code=$keyCode, isDown=$isDown")
         context.sendBroadcast(Intent(KeyIntent.action).apply {
             setPackage(context.packageName)

@@ -739,7 +739,17 @@ class AapService : Service(), UsbReceiver.Listener {
         // This ensures media button routing works even BEFORE an AA connection,
         // which is critical for keymap configuration and early button presses.
         // Lynk OSN cluster, HUD and steering wheel follow the active media session.
-        com.andrerinas.openheadunit.osn.OsnCarLink.start(this)
+        // The session class also names ICCOA types. Those types are absent until icar-sdk.dex is
+        // injected, and a failure here used to kill the process during the first foreground start,
+        // before any phone was connected.
+        try {
+            com.andrerinas.openheadunit.osn.OsnCarLink.start(this)
+        } catch (error: Throwable) {
+            AppLog.e(
+                "OSN media session was not started (${error.javaClass.simpleName}: ${error.message})",
+                error
+            )
+        }
         if (!BuildConfig.ICCOA_ONLY) {
             if (mediaSession == null) {
                 setupMediaSession()

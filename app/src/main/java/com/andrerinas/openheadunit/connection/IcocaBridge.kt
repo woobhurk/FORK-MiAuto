@@ -59,23 +59,43 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
     /** Latest navigation snapshot from the phone (ICCOA `NotifyNavigationInfo`). */
     val navigation: StateFlow<UCarCommon.NavigationInfo?> = _navigation.asStateFlow()
 
-    /** The underlying SDK facade. Public so projection / navigation code can reach raw APIs. */
-    val manager = IccoaManager(context.applicationContext, this)
+    /**
+     * The underlying SDK facade, or null when this APK was built without `icar-sdk.dex`.
+     *
+     * Constructing [IccoaManager] resolves `com.ucar.vehiclesdk.*`. Those classes live only in the
+     * injected dex, which is not part of a source checkout. Doing that from [AppComponent] — which
+     * [com.andrerinas.openheadunit.App.onCreate] builds unconditionally — used to kill the process
+     * with [NoClassDefFoundError] before the launcher was drawn. A missing SDK disables the link;
+     * it must not disable the app.
+     */
+    val manager: IccoaManager? = try {
+        IccoaManager(context.applicationContext, this)
+    } catch (error: LinkageError) {
+        AppLog.e(
+            "ICCOA SDK is not in this APK (${error.javaClass.simpleName}: ${error.message}). " +
+                "Opening without CarLink."
+        )
+        null
+    }
 
     @Volatile
     private var started = false
 
     /** Starts (or restarts) the ICCOA link: SDK init once, then BLE advertising. */
     fun start() {
+        val sdk = manager ?: run {
+            AppLog.w("ICCOA: start() ignored — SDK is not packaged")
+            return
+        }
         if (started) {
             AppLog.i("ICCOA: start() ignored — already started; restarting advertise")
-            manager.start() // init-once inside; falls through to reAdvertise()
+            sdk.start() // init-once inside; falls through to reAdvertise()
             return
         }
         started = true
         AppLog.i("ICCOA: start()")
         updatePhase(Phase.Advertising)
-        manager.start()
+        sdk.start()
     }
 
     /** Stops advertising and tears the session down, keeping the SDK initialised for a restart. */
@@ -83,8 +103,8 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
         if (!started) return
         started = false
         AppLog.i("ICCOA: stop()")
-        manager.stop()
-        OsnCarLink.onDisconnected(appContext)
+        manager?.stop()
+        safeOsn { OsnCarLink.onDisconnected(appContext) }
         _state.update { it.copy(phase = Phase.Idle, pinCode = null) }
     }
 
@@ -97,7 +117,7 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
      */
     fun disconnectSession() {
         AppLog.i("ICCOA: disconnectSession()")
-        manager.disconnectSession()
+        manager?.disconnectSession()
         _state.update { it.copy(phase = Phase.Advertising, pinCode = null) }
     }
 
@@ -108,21 +128,25 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
      */
     fun refreshPairing() {
         AppLog.i("ICCOA: refreshPairing()")
-        manager.refreshPairing()
+        manager?.refreshPairing()
         _state.update { it.copy(pinCode = null) }
     }
 
     /** Native screen size handed to the SDK; drives the negotiated stream resolution. */
-    fun setScreenSize(width: Int, height: Int) = manager.setScreenSize(width, height)
+    fun setScreenSize(width: Int, height: Int) {
+        manager?.setScreenSize(width, height)
+    }
 
     /**
      * Hands the projection [surface] to the SDK. Idempotent: the SDK ignores a repeated call for
      * an already-casting surface, and [IccoaManager] only starts the cast once.
      */
-    fun setSurface(surface: Surface) = manager.setSurface(surface)
+    fun setSurface(surface: Surface) {
+        manager?.setSurface(surface)
+    }
 
     /** Last PIN the SDK issued, or null. Useful when the projection activity opens late. */
-    fun lastPinCode(): String? = manager.lastPinCode
+    fun lastPinCode(): String? = manager?.lastPinCode
 
     // ------------------------------------------------------------------
     // IccoaManager.Listener — called on SDK worker threads, hence the StateFlow.
@@ -158,11 +182,11 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
 
     override fun onNavigation(info: UCarCommon.NavigationInfo?) {
         _navigation.value = info
-        if (info != null) OsnCarLink.onNavigation(appContext, info)
+        if (info != null) safeOsn { OsnCarLink.onNavigation(appContext, info) }
     }
 
     override fun onMusic(info: UCarCommon.MusicInfo?) {
-        if (info != null) OsnCarLink.onMusic(appContext, info)
+        if (info != null) safeOsn { OsnCarLink.onMusic(appContext, info) }
     }
 
     /**
@@ -183,7 +207,16 @@ class IcocaBridge(context: Context) : IccoaManager.Listener {
             )
         }
         if (previous == Phase.Connected && phase != Phase.Connected) {
-            OsnCarLink.onDisconnected(appContext)
+            safeOsn { OsnCarLink.onDisconnected(appContext) }
+        }
+    }
+
+    /** Cluster / HUD output must not take down the process that draws the standby screen. */
+    private inline fun safeOsn(block: () -> Unit) {
+        try {
+            block()
+        } catch (error: Throwable) {
+            AppLog.w("OSN output failed: ${error.javaClass.simpleName}: ${error.message}")
         }
     }
 }
