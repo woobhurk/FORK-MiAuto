@@ -1,0 +1,83 @@
+---
+description: 领克 OSN 2.0 内置软件（HUD、仪表、媒体、导航、CarLink）的系统交互。改 OSN 的 HUD、仪表、媒体或导航输出前先对照这里。
+alwaysApply: true
+---
+
+# OSN 2.0 内置软件（`apks/05-emp@osn-2.0/`）
+
+静态逆向，版本一律 `1.0.20251121L(d2)` / versionCode 210，提交 `442446e`。未在实车运行。HUD 构建变体是 `dcy11`，导航服务是 `ex11`。不要把这些 APK 的壳或类搬进 MiAuto；只对照它们的车机接口。
+
+## 两条总线
+
+应用互调走吉利 OneOS：`bind` `com.geely.service.oneosapi` / `com.geely.service.oneosapi.OneOSApiService`，再按服务号取 Binder。
+
+- `1` 导航 `INaviServer`
+- `2` 语音
+- `3` 媒体 `IMediaCenter`
+- `8` 方控 `KeyInputManager`
+- `14` 电话
+- `19` 互联 `LinkManager`（HiCar=1，CarLink=2）
+- `21` Dock，`22` 桌面
+
+车身、HUD 光机、仪表走亿咖通 AdaptAPI：`Car` / `HUDInteraction` / `DimInteraction`，底下是 `ECarXCar` 信号和 `DIMProtocolManager`。HUD、`naviService`、`MediaCenterService`、`com.geely.carlink` 的 `sharedUserId` 是 `android.uid.system`。
+
+## 六个包
+
+- `com.geely.hud`：挡风玻璃画面。不自己算路、不读 GNSS。
+- `com.geely.naviService`：导航中枢，并通知仪表进入转向引导。
+- `com.geely.naviserviceui`：桌面导航卡片，只调 OneOS 导航。
+- `com.geely.mediacenterservice`：音源仲裁、方控、主屏/副屏焦点。action `android.intent.action.GEELY_MEDIACENTER_SERVICE`。
+- `com.geely.mediawidget`：常驻媒体卡片，任务亲和性 `com.tencent.wecarflow`。自己不播歌。
+- `com.geely.carlink`：车机自带 ICCOA 车机端（`eos_supports_psd=true`）。发现层是 `BluetoothLeService`、`WifiP2pService`、`WifiApService`、`ShareLinkService`，证书 `assets/ccd.data`。投屏是 `UCarAdapter.startCast(Surface)`。
+
+## HUD
+
+触发：仪表菜单恢复广播 `com.geely.dimmenu.hasresumed` → `HudService`。HUD 开关是车身功能号 `537985280`，雪地 `654442752`，高度 `654378240`。任一「HUD 开」或「正在引导」成立，就以 `FLAG_ACTIVITY_NEW_TASK`（常量值 `0x10000000`）启动 `HUDActivity`：`setLaunchDisplayId(2)`、窗口模式 `5`、厂商分屏位置 `1`。
+
+界面模式来自 `HUDInteraction`：`1` 驾驶、`2` 引导、`3` 简易、`4` AR。
+
+导航来自 OneOS `NaviManager`：`1001` 地图状态，`3407` 转向引导，`1003` 剩余距离，`3418` 车道，`3808` 导航红绿灯，`3809` 巡航红绿灯。状态 `151` 表示进入百度地图，此时关掉红绿灯。
+
+车道线和前车警告来自车辆信号，不来自地图：`AsyLineLe/RiPah*`、`ObjFrnt1*`、`CllsnFwdWarn`、纵向车速、方向盘转角、`HudPosnUpldToDIMPosY`。光机回传 `PA_HUD_DispModSet`、`ARD300`、`ARD310`、`ARD311`。AR 贴图在 `libARC_solib.so`（经 `JniUtils` 送 ADAS 目标、ADAS 车道、导航）。标定文件 `/mnt/vendor/persist/data/ARHUD_Config.properties`。工程广播 `com.ecarx.hud.SET_MODE_CALIBRATION`、`com.ecarx.hud.OUTPUT_CALIBRATION_DATA`。
+
+蓝牙电话绑定 `com.geely.oneosphone` 的 `com.geely.btphone.BluetoothService`，不走媒体中心。
+
+`com.geely.carlink` 把 display `0` 当主屏、display `2` 当副驾屏。HUD 也把界面投到 display `2`。这两处是不是同一块物理屏，要看实车显示拓扑，不要假定。
+
+## 仪表（DIM）
+
+写仪表的是 `naviService`，不是 HUD 进程。进入引导时 `DimInteraction.getNaviInteraction().notifyTurnByTurnStarted()`：`DIMProtocolManager.sendMessageToDIM`，`ECarXCarVfhudManager.CB_HUD_DispModSet(1)`，`android.sys.navi.status=1`。退出时 `notifyTurnByTurnStopped()`，光机模式 `0`，属性 `0`。换地图前 `IDimMenuInteraction.switchNaviMode(1)` 关掉仪表导航。
+
+目的地距离和经纬度写成 `setDstToDestination`、`setDestinationPOI`；偏航用 `setPlannedPahDe`。扩展键 `EXT_KEY_DIM_DISPLAY_MODE`：`33` 关闭、`34` 简洁、`35` 全屏、`36` AR，对应 `onChangeNaviMode(1/2/3/4)`。这版随包 AdaptAPI 里，车道、路口名、转向箭头的接口大多只打日志。
+
+导航开始后 `SplitWinManager` 写 `Settings.System`：`isInSplitWinMode`、`inDockedPackage`、`inDockedActivity`。主界面分别是 `com.autonavi.amapauto.MainMapActivity`、`com.baidu.naviauto.NaviAutoActivity`、`com.geely.map.activity.MainActivity`。
+
+## 导航
+
+`INaviServer.invokeNaviAPIAsync` 的协议号：`3000` 缩放，`3001` 路况，`3003` 回地图，`3400` 回家/公司，`3401` 算路，`3403` 结束导航，`3407` 引导，`3425` 投到另一块屏，`3600` 收藏，`9001` 拉起地图。事件用 `RemoteCallbackList` 回推。`1015` 是 EHP，只转发给别的应用，`naviService` 不写车辆 HAL。
+
+地图供应商：`0` 高德 `com.autonavi.amapauto`（JSON 协议），`1` 百度 `com.baidu.naviauto`（imap LBS AIDL），`6` 吉利 `com.geely.map`。换地图先退出分屏、关掉仪表导航、退出当前地图，延迟 1 秒再连。疲劳驾驶传感器会自动搜「停车场」。
+
+百度可反向问车：`SystemDataMapService` / `ISystemDataService` 提供油量、电量、续航、灯光、IMU、车速、挡位、车型等级，以及代拨电话、打开系统设置。
+
+`com.geely.naviserviceui` 的卡片动作 HOME、COMPANY、SEARCH、GAS、LIKE、CHARGE 调用 `specialPoiNavi`、`searchAround`、`openFavorite`、`backToMap`。包内虽带 `com.geely.os.diminteraction`，小组件点击路径不写仪表。
+
+## 媒体
+
+`IMediaCenter` 主屏和副屏各有当前音源和获焦音源。音源：USB `com.geely.usbservice`，蓝牙，收音机 `com.geely.radio.service`，在线爱趣听 `com.tencent.wecarflow`，云听 `com.geely.yunting`。焦点来自 AdaptAPI `Policy` 的音频焦点回调，再用 `AudioManager` 播放配置认获焦包名。
+
+方控在 OneOS 按键服务：`200087` 下一首，`200088` 上一首，`85` / `200085` 播放暂停；收音机长按调台。焦点包是 HiCar、CarLink 或 Flyme Link 时，同一组键交给 `LinkManager`。K 歌广播 `com.audiocn.karaoke.action.KEY_BROADCAST_FOCUS` 会临时拿走方控。
+
+`com.geely.mediawidget` 绑定同一个媒体中枢。音源列表在中控还是副驾展开，由 `LauncherManager.mediaSourceListDisplay` 决定。
+
+这 6 个包没有调用 `getMediaInteraction()`。随包的 `MediaInteraction.updatePlaybackInfo` 等方法体是空的。仪表上的歌曲条不由这组 APK 下发；产品目标仍是仪表显示当前歌曲，实现时要另找实车通路，不要调用这份空实现。
+
+## CarLink 与本地能力的互斥
+
+车机自带 `com.geely.carlink` 已是 system uid，占着互联、方控，以及「本地导航和手机导航只留一个」。本地地图状态 `16`（导航开始）时 `stopCarLinkNav`；手机要导航且本地仍在引导时，OneOS `cancelNavi`。正在停手机导航时，不再停本地导航。它不把手机 TBT 写进 HUD。
+
+车身：传感器 `2097664` 挡位，`1048832` 车速，`2097408` 电源；挡位和车速经 `UCarAdapter` 上报手机。方控长按 `200231` 唤醒手机语音。
+
+## 对 MiAuto 的含义
+
+只在主屏投 Surface、不经过导航服务号 `1`，HUD 和仪表不会自动出现手机上的转向箭头。手机导航要进 HUD，数据得变成 OneOS 事件（至少 `1001` 和 `3407`），或由 `naviService` 调用 `notifyTurnByTurnStarted()`。AR 车道和 AEB 依赖能连上 `ECarXCar` 的 system 应用。方向盘音乐要注册按键服务号 `8`，或在 CarLink 会话里把键送回手机。
