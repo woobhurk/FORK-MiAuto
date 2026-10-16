@@ -9,7 +9,9 @@ MiAuto 是车机端 ICCOA CarLink（小米 CarWith / OPPO Car+ / vivo Jovi InCar
 
 OSN 上要同时具备：完整投屏互联、方向盘控制音乐、仪表显示当前歌曲、HUD 显示导航和音乐。这些输出始终启用，不按车型开关分支。平台包包括 `com.geely.mediacenterservice`、`com.geely.service.oneosapi`、`com.geely.online.service`。
 
-`apks/` 里的三份参考包功能都不完整，只用来对照车机接口，不要把它们的壳或加固代码搬进工程：
+`apks/05-emp@osn-2.0/` 是车机内置的 HUD、导航中枢、导航卡片、媒体中枢、媒体卡片和 ICCOA CarLink。包名、服务号、协议号、车辆信号和仪表/HUD 通路记在 `osn-emp-builtins` 规则里。改这些输出前先对照那份规则。内置 `com.geely.carlink` 已经占用互联和「本地导航与手机导航互斥」；随包的 `MediaInteraction` 是空实现，仪表歌曲不要走它。
+
+`apks/` 根目录另有三份参考包，功能都不完整，只用来对照车机接口，不要把它们的壳或加固代码搬进工程：
 
 - `DBPlay_1.0.0.apk`（`com.dbtool.carplay`）：由 Xcertplay 改来的 OSN CarPlay。苹果手机连上后方向盘、HUD 相对完整。壳是加固的，清单声明了 Geely OneOS / 媒体中心，以及 `CarPlayMediaSessionService`。
 - `小八智控大师_2.0.1.apk`（`com.xiaoba.smartcontroller`）：给 QQ 音乐、汽水音乐等补桌面控件、方向盘和仪表。主体加固。清单里有 `SteeringWheelService`、`MediaButtonReceiver`，以及 `ecarx.car.permission.CAR_INFO`。
